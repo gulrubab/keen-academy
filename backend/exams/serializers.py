@@ -1,4 +1,4 @@
-﻿from rest_framework import serializers
+from rest_framework import serializers
 from .models import Exam, Mark
 
 
@@ -26,7 +26,7 @@ class MarkSerializer(serializers.ModelSerializer):
         model = Mark
         fields = [
             "id", "exam", "exam_name", "exam_date", "subject", "subject_name", "student", "student_name",
-            "obtained_marks", "total_marks", "percentage", "entered_by", "updated_at",
+            "obtained_marks", "total_marks", "percentage", "date", "entered_by", "updated_at",
         ]
         read_only_fields = ["entered_by", "updated_at"]
 

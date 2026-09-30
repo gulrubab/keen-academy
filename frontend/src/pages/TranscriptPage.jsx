@@ -21,7 +21,9 @@ function userIdFromToken() {
 
 export default function TranscriptPage() {
   const [marks, setMarks] = useState([]);
+  const [diag, setDiag] = useState(null);
   const [examId, setExamId] = useState("");
+  const [subjectView, setSubjectView] = useState("all"); // __VIEW_PATCHED__
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -33,8 +35,9 @@ export default function TranscriptPage() {
         if (!alive) return;
         const all = asList(data);
         const uid = userIdFromToken();
-        const mine = uid ? all.filter((m) => m.student === uid) : all;
+        const mine = uid ? all.filter((m) => String(m.student) === String(uid)) : all;
         setMarks(mine);
+      setDiag({ total: all.length, uid, ids: [...new Set(all.map((m) => m.student))].slice(0, 6) });
         const newest = [...mine].sort((a, b) =>
           String(b.exam_date ?? "").localeCompare(String(a.exam_date ?? ""))
         )[0];
@@ -59,12 +62,22 @@ export default function TranscriptPage() {
 
   const exam = exams.find((e) => String(e.id) === String(examId));
 
-  const rows = useMemo(
+  const examRows = useMemo(
     () =>
       marks
         .filter((m) => String(m.exam) === String(examId))
         .sort((a, b) => (a.subject_name || "").localeCompare(b.subject_name || "")),
     [marks, examId]
+  );
+
+  const subjectNames = useMemo(
+    () => [...new Set(examRows.map((m) => m.subject_name).filter(Boolean))],
+    [examRows]
+  );
+
+  const rows = useMemo(
+    () => (subjectView === "all" ? examRows : examRows.filter((m) => m.subject_name === subjectView)),
+    [examRows, subjectView]
   );
 
   const obtained = rows.reduce((sum, m) => sum + Number(m.obtained_marks), 0);
@@ -82,19 +95,31 @@ export default function TranscriptPage() {
           </div>
         )}
         {loading && <p className="tx-muted">Loading results...</p>}
-        {!loading && !error && marks.length === 0 && (
+        {!loading && !error && marks.length === 0 && (<>
           <p className="tx-muted">No marks have been published for you yet.</p>
+          {diag && <p className="tx-muted">Debug: API returned {diag.total} marks, none match your id ({String(diag.uid)}). Marks belong to student ids: {diag.ids.join(", ")}</p>}</>
         )}
 
         {marks.length > 0 && (
           <div className="tx-controls">
             <label>
               Exam
-              <select value={examId} onChange={(e) => setExamId(e.target.value)}>
+              <select value={examId} onChange={(e) => { setExamId(e.target.value); setSubjectView("all"); }}>
                 {exams.map((x) => (
                   <option key={x.id} value={x.id}>
                     {x.name}
                     {x.date ? ` (${x.date})` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              View
+              <select value={subjectView} onChange={(e) => setSubjectView(e.target.value)}>
+                <option value="all">Full report card (all subjects)</option>
+                {subjectNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n} only
                   </option>
                 ))}
               </select>
@@ -109,7 +134,7 @@ export default function TranscriptPage() {
           <article className="tx-sheet">
             <header className="tx-head">
               <h1>KEEN Evening Coaching</h1>
-              <p>Report card</p>
+              <p>{subjectView === "all" ? "Full report card" : subjectView + " result"}</p>
             </header>
 
             <dl className="tx-meta">
@@ -118,13 +143,12 @@ export default function TranscriptPage() {
                 <dd>{studentName}</dd>
               </div>
               <div>
-                <dt>Exam</dt>
-                <dd>{exam?.name}</dd>
+                <dt>{subjectView === "all" ? "Report" : "Subject"}</dt><dd>{subjectView === "all" ? "All subjects" : subjectView}</dd>
               </div>
-              {exam?.date && (
+              {subjectView !== "all" && (rows[0]?.date || exam?.date) && (
                 <div>
                   <dt>Date</dt>
-                  <dd>{exam.date}</dd>
+                  <dd>{rows[0]?.date || exam?.date}</dd>
                 </div>
               )}
             </dl>
@@ -144,7 +168,7 @@ export default function TranscriptPage() {
                   const p = Number(m.total_marks) > 0 ? (Number(m.obtained_marks) / Number(m.total_marks)) * 100 : 0;
                   return (
                     <tr key={m.id}>
-                      <td>{m.subject_name}</td>
+                      <td>{m.subject_name}{subjectView === "all" && (m.date || exam?.date) && (<div style={{ fontSize: 12, opacity: 0.7, fontWeight: 400 }}>{m.date || exam?.date}</div>)}</td>
                       <td className="num">{fmt(m.obtained_marks)}</td>
                       <td className="num">{fmt(m.total_marks)}</td>
                       <td className="num">{p.toFixed(1)}%</td>

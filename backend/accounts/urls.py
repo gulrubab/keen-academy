@@ -59,3 +59,8 @@ from .teacher_extras import LectureOptionsView
 urlpatterns += [
     path("teachers/lecture-options/", LectureOptionsView.as_view(), name="teacher-lecture-options"),
 ]
+from .views import ResetTeacherPasswordView
+
+urlpatterns += [
+    path("teachers/profiles/<int:pk>/reset-password/", ResetTeacherPasswordView.as_view(), name="teacher-reset-password"),
+]

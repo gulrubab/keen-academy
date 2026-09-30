@@ -1,4 +1,4 @@
-﻿from django.db import models
+from django.db import models
 from accounts.models import User
 from academics.models import Subject, SchoolClass
 
@@ -22,6 +22,7 @@ class Mark(models.Model):
     total_marks = models.DecimalField(max_digits=6, decimal_places=2, default=100)
     entered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="marks_entered")
     updated_at = models.DateTimeField(auto_now=True)
+    date = models.DateField(null=True, blank=True)
 
     class Meta:
         unique_together = ("exam", "subject", "student")

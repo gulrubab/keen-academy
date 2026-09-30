@@ -46,7 +46,7 @@ class ExamViewSet(viewsets.ModelViewSet):
             entry = by_student[sid]
             entry["rows"].append({
                 "subject_name": m.subject.name,
-                "obtained_marks": float(m.obtained_marks),
+                "date": m.date.isoformat() if m.date else None, "obtained_marks": float(m.obtained_marks),
                 "total_marks": float(m.total_marks),
             })
             entry["obtained_total"] += float(m.obtained_marks)

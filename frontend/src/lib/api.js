@@ -223,3 +223,5 @@ export const api = {
   attendanceTrend: (days) => request(`/api/attendance/trend/?days=${days}`),
 };
 
+
+

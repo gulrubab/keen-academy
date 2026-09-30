@@ -24,6 +24,7 @@ class NewTeacherTaskSerializer(serializers.Serializer):
 class CreateTeacherSerializer(serializers.Serializer):
     first_name = serializers.CharField()
     last_name = serializers.CharField(required=False, allow_blank=True)
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True, min_length=8)
     username = serializers.CharField(required=False)
     subject_specialization = serializers.CharField(required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
@@ -60,7 +61,7 @@ class CreateTeacherSerializer(serializers.Serializer):
             suffix += 1
             username = f"{base_username}{suffix}"
 
-        temp_password = secrets.token_urlsafe(6)
+        temp_password = validated_data.get("password") or secrets.token_urlsafe(6)
         user = User.objects.create_user(
             username=username,
             password=temp_password,
@@ -99,21 +100,40 @@ class CreateTeacherSerializer(serializers.Serializer):
         return user
 
 
-
-
-
-
-
-
 class EnrollStudentRosterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, min_length=8)
+
     class Meta:
         model = StudentRoster
         fields = [
             "roll_no", "full_name", "class_name", "section", "school_class",
-            "date_of_birth", "cnic_or_bform", "activation_code",
+            "date_of_birth", "cnic_or_bform", "phone_number", "activation_code", "password",
         ]
 
+    def create(self, validated_data):
+        password = validated_data.pop("password")
 
+        roster = StudentRoster.objects.create(**validated_data, source=StudentRoster.Source.ADMIN)
+
+        username = roster.roll_no.strip().lower()
+        base_username, suffix = username, 1
+        while User.objects.filter(username=username).exists():
+            suffix += 1
+            username = f"{base_username}{suffix}"
+
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            first_name=roster.full_name,
+            role=User.Role.STUDENT,
+            must_change_password=False,
+        )
+        StudentProfile.objects.create(user=user, roster_entry=roster)
+        roster.is_claimed = True
+        roster.save(update_fields=["is_claimed"])
+
+        self._generated_username = username
+        return roster
 
 
 class StudentSignUpSerializer(serializers.Serializer):
@@ -230,11 +250,34 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
 
 
 class StudentRosterManageSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True, min_length=8)
+    username = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = StudentRoster
         fields = [
             "id", "roll_no", "full_name", "class_name", "section", "school_class",
-            "date_of_birth", "cnic_or_bform", "activation_code",
-            "source", "is_claimed", "created_at",
+            "date_of_birth", "cnic_or_bform", "phone_number", "activation_code",
+            "source", "is_claimed", "created_at", "password", "username",
         ]
         read_only_fields = ["source", "is_claimed", "created_at"]
+
+    def get_username(self, obj):
+        account = getattr(obj, "student_account", None)
+        return account.user.username if account else None
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", "")
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if password:
+            account = getattr(instance, "student_account", None)
+            if account:
+                account.user.set_password(password)
+                account.user.must_change_password = True
+                account.user.save(update_fields=["password", "must_change_password"])
+
+        return instance

@@ -1,0 +1,35 @@
+﻿--- isEdit line ---
+
+src\pages\AddTeacher.jsx:139:  const isEdit = mode === "edit";
+
+
+--- setCreated(null) occurrences ---
+
+src\pages\AddTeacher.jsx:165:    setCreated(null);
+src\pages\AddTeacher.jsx:173:    setCreated(null);
+src\pages\AddTeacher.jsx:182:    setCreated(null);
+
+
+--- title line ---
+
+src\pages\AddTeacher.jsx:384:                  {created ? 
+"Teacher added" : isEdit ? "Edit Teacher" : "Add New Teacher"}
+
+
+--- panel fields ---
+
+src\pages\AddTeacher.jsx:407:                  <Notice 
+tone="success">{created.message}</Notice>
+
+
+
+src\pages\AddTeacher.jsx:409:                    <Row 
+label="Username" value={created.username} />
+
+
+
+src\pages\AddTeacher.jsx:410:                    <Row 
+label="Temporary password" value={created.temporary_password} 
+/>
+
+

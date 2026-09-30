@@ -310,9 +310,7 @@ export default function AdminDashboard() {
                       <span className="font-semibold text-slate-700">{t.name}</span>
                     </div>
                   </td>
-                 <td className="py-3 text-slate-500">
-  {t.subject_specialization || "—"}
-</td>
+                  <td className="py-3 text-slate-500">{t.subject || "Ã¢â‚¬â€"}</td>
                   <td className="py-3 text-right"><Pill tone={t.active ? "green" : "slate"}>{t.active ? "active" : "inactive"}</Pill></td>
                 </tr>
               ))}

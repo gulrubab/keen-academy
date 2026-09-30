@@ -80,12 +80,36 @@ function pivotSubjects(results) {
   return { subjects, rows: withLookup };
 }
 
-function StudentResultSheet({ student, exam, subjects, onClose }) {
+function StudentResultSheet({ student, exam, subjects, onClose, initialView = "all" }) {
+  // __VIEW_PATCHED__
+  const [view, setView] = useState(initialView);
+
+  useEffect(() => {
+    setView(initialView);
+  }, [initialView, student?.student_id]);
+  const shown = view === "all" ? subjects : subjects.filter((n) => n === view);
+  const shownRows = shown.map((n) => student.bySubject[n]).filter(Boolean);
+  const sumObt = view === "all" ? student.obtained_total : shownRows.reduce((s, r) => s + Number(r.obtained_marks), 0);
+  const sumTot = view === "all" ? student.total_total : shownRows.reduce((s, r) => s + Number(r.total_marks), 0);
+  const sumPct = view === "all" ? student.percentage : (sumTot > 0 ? Math.round((sumObt / sumTot) * 10000) / 100 : 0);
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-6 print:static print:bg-white print:p-0">
       <style>{sheetCss}</style>
       <div className="w-full max-w-2xl">
         <div className="mb-4 flex justify-end gap-2 print:hidden">
+          <select
+            className={INPUT_CLS + " max-w-xs"}
+            value={view}
+            onChange={(e) => setView(e.target.value)}
+            aria-label="Choose report view"
+          >
+            <option value="all">Full report card (all subjects)</option>
+            {subjects.map((n) => (
+              <option key={n} value={n}>
+                {n} only
+              </option>
+            ))}
+          </select>
           <Button variant="quiet" onClick={onClose} className="px-4 py-2 text-sm">
             Close
           </Button>
@@ -97,7 +121,7 @@ function StudentResultSheet({ student, exam, subjects, onClose }) {
         <article className="rs-sheet">
           <header className="rs-head">
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}><img src="/keen-logo.png" alt="KEEN Academy logo" style={{ height: 56, width: "auto", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }} /><h1>KEEN Academy</h1></div>
-            <p>Student Report Card</p>
+            <p>{view === "all" ? "Student Report Card" : view + " Result"}</p>
           </header>
 
           <section className="rs-info">
@@ -110,8 +134,8 @@ function StudentResultSheet({ student, exam, subjects, onClose }) {
               <strong>{student.roll_no || "-"}</strong>
             </div>
             <div>
-              <span>Exam Date</span>
-              <strong>{exam?.date ? prettyDate(exam.date) : "-"}</strong>
+              <span>{view === "all" ? "Report" : "Date"}</span>
+              <strong>{view === "all" ? "All subjects" : (() => { const d = shownRows[0]?.date || exam?.date; return d ? prettyDate(d) : "-"; })()}</strong>
             </div>
           </section>
 
@@ -126,7 +150,7 @@ function StudentResultSheet({ student, exam, subjects, onClose }) {
               </tr>
             </thead>
             <tbody>
-              {subjects.map((name) => {
+              {shown.map((name) => {
                 const row = student.bySubject[name];
                 if (!row) {
                   return (
@@ -141,7 +165,7 @@ function StudentResultSheet({ student, exam, subjects, onClose }) {
                 const p = row.total_marks > 0 ? (row.obtained_marks / row.total_marks) * 100 : 0;
                 return (
                   <tr key={name}>
-                    <td>{name}</td>
+                    <td>{name}{view === "all" && (row.date || exam?.date) && (<div style={{ fontSize: 11, opacity: 0.7, fontWeight: 400 }}>{prettyDate(row.date || exam.date)}</div>)}</td>
                     <td className="num">{fmt(row.obtained_marks)}</td>
                     <td className="num">{fmt(row.total_marks)}</td>
                     <td className="num">{p.toFixed(1)}%</td>
@@ -158,16 +182,16 @@ function StudentResultSheet({ student, exam, subjects, onClose }) {
             <div>
               <span>Total Marks</span>
               <strong>
-                {fmt(student.obtained_total)} / {fmt(student.total_total)}
+                {fmt(sumObt)} / {fmt(sumTot)}
               </strong>
             </div>
             <div>
               <span>Percentage</span>
-              <strong>{student.percentage}%</strong>
+              <strong>{sumPct}%</strong>
             </div>
             <div>
-              <span>Overall Grade</span>
-              <strong>{gradeFor(student.percentage)}</strong>
+              <span>{view === "all" ? "Overall Grade" : "Grade"}</span>
+              <strong>{gradeFor(sumPct)}</strong>
             </div>
           </section>
 
@@ -180,6 +204,194 @@ function StudentResultSheet({ student, exam, subjects, onClose }) {
             <span>Date: {prettyDate(todayString())}</span>
             <span>Principal</span>
           </div>
+        </article>
+      </div>
+    </div>
+  );
+}
+
+function FullStudentReportCard({ student, onClose }) {
+  const rows = [...(student?.rows || [])].sort((a, b) => {
+    const da = String(a.date || a.exam_date || "");
+    const db = String(b.date || b.exam_date || "");
+    return da.localeCompare(db) || String(a.subject_name || "").localeCompare(String(b.subject_name || ""));
+  });
+
+  const totalObt = rows.reduce(
+    (sum, r) => sum + Number(r.obtained_marks || 0),
+    0
+  );
+
+  const totalMax = rows.reduce(
+    (sum, r) => sum + Number(r.total_marks || 0),
+    0
+  );
+
+  const percentage =
+    totalMax > 0
+      ? Math.round((totalObt / totalMax) * 10000) / 100
+      : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-6 print:static print:bg-white print:p-0">
+      <style>{sheetCss}</style>
+
+      <div className="w-full max-w-3xl">
+
+        <div className="mb-4 flex justify-end gap-2 print:hidden">
+          <Button
+            variant="quiet"
+            onClick={onClose}
+            className="px-4 py-2 text-sm"
+          >
+            Close
+          </Button>
+
+          <Button
+            onClick={() => window.print()}
+            className="px-4 py-2 text-sm"
+          >
+            Print Full Report Card
+          </Button>
+        </div>
+
+        <article className="rs-sheet">
+
+          <header className="rs-head">
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <img
+                src="/keen-logo.png"
+                alt="KEEN Academy logo"
+                style={{
+                  height: 56,
+                  width: "auto",
+                  WebkitPrintColorAdjust: "exact",
+                  printColorAdjust: "exact",
+                }}
+              />
+
+              <h1>KEEN Academy</h1>
+            </div>
+
+            <p>Student Full Report Card</p>
+          </header>
+
+          <section className="rs-info">
+
+            <div>
+              <span>Student Name</span>
+              <strong>{student.student_name}</strong>
+            </div>
+
+            <div>
+              <span>Roll No.</span>
+              <strong>{student.roll_no || "-"}</strong>
+            </div>
+
+            <div>
+              <span>Report</span>
+              <strong>All Exams & Subjects</strong>
+            </div>
+
+          </section>
+
+          <table className="rs-table">
+
+            <thead>
+  <tr>
+    <th>Subject</th>
+    <th className="num">Obtained</th>
+    <th className="num">Total</th>
+    <th className="num">Percentage</th>
+    <th className="num">Grade</th>
+  </tr>
+</thead>
+
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: "center" }}>
+                    No marks found for this student.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, index) => {
+                  const p =
+                    Number(row.total_marks) > 0
+                      ? (Number(row.obtained_marks) /
+                          Number(row.total_marks)) *
+                        100
+                      : 0;
+return (
+                    <tr key={`${row.exam_id || "exam"}-${row.subject_name}-${index}`}>
+
+                      <td>
+  {row.subject_name || "-"}
+</td>
+
+<td className="num">
+  {fmt(row.obtained_marks)}
+</td>
+
+<td className="num">
+  {fmt(row.total_marks)}
+</td>
+
+<td className="num">
+  {p.toFixed(1)}%
+</td>
+
+<td className="num">
+  <span className="rs-pill">
+    {gradeFor(p)}
+  </span>
+</td>
+
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+
+          </table>
+
+          <section className="rs-summary">
+
+            <div>
+              <span>Total Marks</span>
+              <strong>
+                {fmt(totalObt)} / {fmt(totalMax)}
+              </strong>
+            </div>
+
+            <div>
+              <span>Overall Percentage</span>
+              <strong>{percentage}%</strong>
+            </div>
+
+            <div>
+              <span>Overall Grade</span>
+              <strong>{gradeFor(percentage)}</strong>
+            </div>
+
+          </section>
+
+          <div className="rs-remarks">
+            <span>Remarks</span>
+          </div>
+
+          <div className="rs-sign">
+            <span>Parent signature</span>
+            <span>Date: {prettyDate(todayString())}</span>
+            <span>Principal</span>
+          </div>
+
         </article>
       </div>
     </div>
@@ -205,12 +417,19 @@ export default function Exams() {
   const [results, setResults] = useState([]);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsError, setResultsError] = useState("");
+  const [resultView, setResultView] = useState("all");
   const [sheetStudent, setSheetStudent] = useState(null);
+
+  const [fullReportStudents, setFullReportStudents] = useState([]);
+  const [fullReportStudentId, setFullReportStudentId] = useState("");
+  const [fullReportLoading, setFullReportLoading] = useState(false);
+  const [fullReportError, setFullReportError] = useState("");
+  const [fullReportStudent, setFullReportStudent] = useState(null);
 
   const [markOpen, setMarkOpen] = useState(false);
   const [markSubjects, setMarkSubjects] = useState([]);
   const [markStudents, setMarkStudents] = useState([]);
-  const [markForm, setMarkForm] = useState({ exam: "", subject: "", student: "", obtained_marks: "", total_marks: "100" });
+  const [markForm, setMarkForm] = useState({ exam: "", subject: "", student: "", obtained_marks: "", total_marks: "100", date: "" });
   const [markBusy, setMarkBusy] = useState(false);
   const [markError, setMarkError] = useState("");
   const [markExistingId, setMarkExistingId] = useState(null);
@@ -232,24 +451,183 @@ export default function Exams() {
   useEffect(() => {
     load();
   }, [load]);
+// FULL STUDENT REPORT LOADER
+  useEffect(() => {
+    if (!items || items.length === 0) {
+      setFullReportStudents([]);
+      return;
+    }
+
+    let alive = true;
+
+    setFullReportLoading(true);
+    setFullReportError("");
+
+    Promise.all(
+      items.map(async (exam) => {
+        try {
+          const data = await api.getExamResults(exam.id);
+
+          return {
+            exam,
+            results: asList(data),
+          };
+        } catch (error) {
+          return {
+            exam,
+            results: [],
+          };
+        }
+      })
+    )
+      .then((allExamResults) => {
+        if (!alive) return;
+
+        const byStudent = {};
+
+        for (const block of allExamResults) {
+          const exam = block.exam;
+
+          for (const student of block.results) {
+            const sid = String(student.student_id);
+
+            if (!byStudent[sid]) {
+              byStudent[sid] = {
+                student_id: student.student_id,
+                student_name: student.student_name,
+                roll_no: student.roll_no,
+                rows: [],
+              };
+            }
+
+            for (const row of student.rows || []) {
+              /*
+               * IMPORTANT:
+               * Keep the REAL exam that this result came from.
+               *
+               * Do NOT guess the exam from the subject name.
+               *
+               * block.exam is the actual exam used by the backend
+               * when it returned this student's marks.
+               */
+              byStudent[sid].rows.push({
+                exam_id: exam.id,
+                exam_name: exam.name,
+                exam_date: exam.date,
+
+                subject_name: row.subject_name,
+
+                // Individual mark date first.
+                // Otherwise use the actual exam date.
+                date: row.date || exam.date,
+
+                obtained_marks: row.obtained_marks,
+                total_marks: row.total_marks,
+              });
+            }
+          }
+        }
+
+        const list = Object.values(byStudent).sort((a, b) =>
+          String(a.student_name || "").localeCompare(
+            String(b.student_name || "")
+          )
+        );
+
+        setFullReportStudents(list);
+      })
+      .catch((error) => {
+        if (alive) {
+          setFullReportError(
+            error?.message || "Could not load student report cards."
+          );
+        }
+      })
+      .finally(() => {
+        if (alive) setFullReportLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [items]);
 
   useEffect(() => {
     setResults([]);
     setResultsError("");
-    if (!resultsExamId) return;
+
+    if (!resultsExamId) {
+      setResultView("all");
+      return;
+    }
+
     let alive = true;
     setResultsLoading(true);
+
     api
       .getExamResults(resultsExamId)
       .then((data) => {
-        if (alive) setResults(asList(data));
+        if (!alive) return;
+
+        const list = asList(data);
+        setResults(list);
+
+        /*
+         * Automatically select the subject that belongs to the
+         * selected exam.
+         *
+         * Example:
+         *   "Maths (19 Sept 2026)" -> Maths
+         *   "Physics (20 Sept 2026)" -> Physics
+         *
+         * This prevents a Maths exam from opening as a full
+         * multi-subject report card.
+         */
+        const selectedExam = items.find(
+          (x) => String(x.id) === String(resultsExamId)
+        );
+
+        const examName = String(selectedExam?.name || "").trim().toLowerCase();
+
+        const subjectSet = new Set();
+
+        for (const student of list) {
+          for (const row of student.rows || []) {
+            if (row.subject_name) {
+              subjectSet.add(String(row.subject_name));
+            }
+          }
+        }
+
+        const availableSubjects = [...subjectSet];
+
+        const matchedSubject = availableSubjects.find((subject) => {
+          const s = String(subject).trim().toLowerCase();
+
+          return (
+            examName === s ||
+            examName.startsWith(s + " ") ||
+            examName.startsWith(s + "(") ||
+            examName.includes(s)
+          );
+        });
+
+        setResultView(matchedSubject || "all");
       })
-      .catch((e) => alive && setResultsError(e.message))
-      .finally(() => alive && setResultsLoading(false));
+      .catch((e) => {
+        if (alive) {
+          setResultsError(e.message);
+          setResultView("all");
+        }
+      })
+      .finally(() => {
+        if (alive) setResultsLoading(false);
+      });
+
     return () => {
       alive = false;
     };
-  }, [resultsExamId]);
+  }, [resultsExamId, items]);
 
   const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const ready = form.name.trim().length > 0 && form.date !== "";
@@ -385,7 +763,7 @@ export default function Exams() {
               setMarkExistingId(existing.id);
               setMarkForm((f) => ({
                 ...f,
-                obtained_marks: String(Number(existing.obtained_marks)),
+                obtained_marks: String(Number(existing.obtained_marks)), date: existing.date || "",
                 total_marks: String(Number(existing.total_marks)),
               }));
             }
@@ -411,7 +789,7 @@ export default function Exams() {
     try {
       const body = {
         obtained_marks: Number(markForm.obtained_marks),
-        total_marks: Number(markForm.total_marks),
+        total_marks: Number(markForm.total_marks), date: markForm.date || null,
       };
       if (markExistingId) {
         await api.updateMark(markExistingId, body);
@@ -441,6 +819,38 @@ export default function Exams() {
   const count = items.length;
   const resultsExam = items.find((x) => String(x.id) === String(resultsExamId));
   const { subjects, rows } = useMemo(() => pivotSubjects(results), [results]);
+
+  const visibleSubjects =
+    resultView === "all"
+      ? subjects
+      : subjects.filter((name) => name === resultView);
+
+  const visibleRows = rows.map((r) => {
+    if (resultView === "all") return r;
+
+    const selected = r.bySubject[resultView];
+
+    if (!selected) {
+      return {
+        ...r,
+        obtained_total: 0,
+        total_total: 0,
+        percentage: 0,
+      };
+    }
+
+    const obtained = Number(selected.obtained_marks);
+    const total = Number(selected.total_marks);
+
+    return {
+      ...r,
+      obtained_total: obtained,
+      total_total: total,
+      percentage: total > 0
+        ? Math.round((obtained / total) * 10000) / 100
+        : 0,
+    };
+  });
 
   return (
     <AppShell
@@ -557,13 +967,82 @@ export default function Exams() {
                 ))}
               </select>
             </FormItem>
+
+            <FormItem label="Result View">
+              <select
+                className={INPUT_CLS}
+                value={resultView}
+                onChange={(e) => setResultView(e.target.value)}
+                aria-label="Choose result view"
+              >
+                <option value="all">Full Report Card (All Subjects)</option>
+                {subjects.map((name) => (
+                  <option key={name} value={name}>
+                    {name} only
+                  </option>
+                ))}
+              </select>
+            </FormItem>
+
+            <FormItem label="Student Full Report Card">
+              <div className="flex gap-2">
+                <select
+                  className={INPUT_CLS}
+                  value={fullReportStudentId}
+                  onChange={(e) => setFullReportStudentId(e.target.value)}
+                  aria-label="Choose student for full report"
+                >
+                  <option value="">Select student</option>
+
+                  {fullReportStudents.map((student) => (
+                    <option
+                      key={student.student_id}
+                      value={student.student_id}
+                    >
+                      {student.student_name}
+                      {student.roll_no ? ` (${student.roll_no})` : ""}
+                    </option>
+                  ))}
+                </select>
+
+                <Button
+                  disabled={
+                    !fullReportStudentId ||
+                    fullReportLoading
+                  }
+                  onClick={() => {
+                    const selected = fullReportStudents.find(
+                      (student) =>
+                        String(student.student_id) ===
+                        String(fullReportStudentId)
+                    );
+
+                    if (selected) {
+                      setFullReportStudent(selected);
+                    }
+                  }}
+                  className="whitespace-nowrap px-4 py-2.5 text-sm"
+                >
+                  {fullReportLoading
+                    ? "Loading..."
+                    : "Generate Full Report Card"}
+                </Button>
+              </div>
+
+              {fullReportError && (
+                <p className="mt-1 text-xs text-red-600">
+                  {fullReportError}
+                </p>
+              )}
+            </FormItem>
+
             <div className="flex gap-2">
               <Button variant="quiet" onClick={openAddMark} className="px-4 py-2.5 text-sm">
                 + Add Mark
               </Button>
               {rows.length > 0 && (
                 <Button onClick={() => window.print()} className="px-4 py-2.5 text-sm">
-                  Print all results
+                  {resultView === "all" ? "Print full report results" : `Print ${resultView} results`}
                 </Button>
               )}
             </div>
@@ -599,10 +1078,18 @@ export default function Exams() {
                     <tr className="bg-keen-charcoal text-xs font-extrabold uppercase tracking-wider text-white print:bg-white print:text-keen-charcoal print:border-b-2 print:border-keen-charcoal">
                       <th className="px-5 py-4">Roll no.</th>
                       <th className="px-5 py-4">Student</th>
-                      {subjects.map((name) => (
-                        <th key={name} className="px-4 py-4 text-right">
-                          {name}
-                        </th>
+                      {visibleSubjects.map((name) => (
+                         <th key={name} className="px-4 py-4 text-right">
+                            {name}
+                            {resultView !== "all" && resultsExam?.date && (
+                              <div style={{ fontSize: 10, opacity: 0.7, fontWeight: 400 }}>
+                                {prettyDate(
+                                  visibleRows.find((r) => r.bySubject[name])?.bySubject[name]?.date ||
+                                  resultsExam.date
+                                )}
+                              </div>
+                            )}
+                          </th>
                       ))}
                       <th className="px-5 py-4 text-right">Total</th>
                       <th className="px-5 py-4 text-right">%</th>
@@ -611,7 +1098,7 @@ export default function Exams() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r) => (
+                    {visibleRows.map((r) => (
                       <tr key={r.student_id} className="border-t border-keen-border">
                         <td className="px-5 py-4 font-mono text-sm text-keen-muted">{r.roll_no || "-"}</td>
                         <td className="px-5 py-4 text-base font-bold text-keen-charcoal">{r.student_name}</td>
@@ -649,11 +1136,19 @@ export default function Exams() {
         </div>
       )}
 
+      {fullReportStudent && (
+        <FullStudentReportCard
+          student={fullReportStudent}
+          onClose={() => setFullReportStudent(null)}
+        />
+      )}
+
       {sheetStudent && (
         <StudentResultSheet
           student={sheetStudent}
           exam={resultsExam}
           subjects={subjects}
+          initialView={resultView}
           onClose={() => setSheetStudent(null)}
         />
       )}
@@ -719,6 +1214,9 @@ export default function Exams() {
             <FormItem label="Total marks" required>
               <input type="number" className={INPUT_CLS} value={markForm.total_marks} onChange={updateMarkField("total_marks")} />
             </FormItem>
+<FormItem label="Date (optional)" hint="Leave blank to use the exam date.">
+<input type="date" className={INPUT_CLS} value={markForm.date || ""} onChange={updateMarkField("date")} />
+</FormItem>
           </div>
           <Notice>{markError}</Notice>
         </div>

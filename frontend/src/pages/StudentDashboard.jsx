@@ -1,51 +1,56 @@
+import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { AppShell, Panel, Pill } from "../components/ui";
+import { AppShell, Pill } from "../components/ui";
+import StudentAttendanceCard from "../components/StudentAttendanceCard";
+import UpcomingExamsCard from "../components/UpcomingExamsCard";
+import TestScoreTrendChart from "../components/TestScoreTrendChart";
+import FeeStatusChart from "../components/FeeStatusChart";
+import TodayClassesCard from "../components/TodayClassesCard";
+
+function Card({ title, className = "", children }) {
+  return (
+    <section
+      className={`min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${className}`}
+    >
+      <div className="h-1 w-full bg-gradient-to-r from-[#17E0E4] to-[#0AA9D4]" />
+      <div className="p-4">
+        <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">{title}</h3>
+        <div className="[&_svg]:max-h-44 [&_svg]:w-full [&_canvas]:max-h-44 [&_img]:max-h-44">{children}</div>
+      </div>
+    </section>
+  );
+}
 
 export default function StudentDashboard() {
   const { session } = useAuth();
 
-  const cards = [
-    { label: "Attendance", value: "Ã¢â‚¬â€", note: "No records yet" },
-    { label: "Latest Test", value: "Ã¢â‚¬â€", note: "No results published" },
-    { label: "Fee Status", value: "Ã¢â‚¬â€", note: "Not set up yet" },
-    { label: "Pending Homework", value: "Ã¢â‚¬â€", note: "No tasks assigned" },
-  ];
-
   return (
     <AppShell
       title={`Welcome, ${session?.username}`}
-      subtitle="Your account is active. Attendance, results and dues appear here as they are recorded."
+      subtitle="Your attendance, exams, results and dues appear here as they are recorded."
       action={<Pill tone="ok">Account active</Pill>}
     >
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className="bg-white border border-keen-border rounded-2xl p-5 shadow-sm"
-          >
-            <span className="text-xs text-keen-muted font-bold uppercase tracking-wider">
-              {card.label}
-            </span>
-            <p className="text-3xl font-black text-keen-charcoal my-2">{card.value}</p>
-            <span className="text-[11px] font-bold text-keen-muted">{card.note}</span>
-          </div>
-        ))}
-      </div>
-
-      <Panel title="Today's Classes">
-        <div className="p-10 text-center">
-          <p className="text-sm font-bold text-keen-charcoal">No timetable yet</p>
-          <p className="mt-1 text-xs text-keen-muted">
-            Once the admin publishes the evening schedule, your classes show up here.
-          </p>
+      <div className="mx-auto w-full max-w-6xl space-y-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Card title="Attendance"><StudentAttendanceCard /></Card>
+          <Card title="Upcoming exams"><UpcomingExamsCard /></Card>
+          <Card title="Fee status" className="md:col-span-2 xl:col-span-1"><FeeStatusChart /></Card>
         </div>
-      </Panel>
-      <p style={{ marginTop: 24 }}>
-        <a href="/student/results" style={{ fontWeight: 600 }}>View results</a>
-      </p>
-      <p style={{ marginTop: 24 }}>
-        <a href="/student/fees" style={{ fontWeight: 600 }}>View fees</a>
-      </p>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Card title="Test scores" className="xl:col-span-2"><TestScoreTrendChart /></Card>
+          <Card title="Today's classes"><TodayClassesCard /></Card>
+        </div>
+
+        <div className="flex flex-wrap gap-3 pt-1">
+          <Link to="/student/results" className="rounded-xl px-4 py-2 text-sm font-bold text-slate-900 hover:brightness-95" style={{ background: "#19D3F3" }}>
+            View results
+          </Link>
+          <Link to="/student/fees" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">
+            View fees
+          </Link>
+        </div>
+      </div>
     </AppShell>
   );
 }

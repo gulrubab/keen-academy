@@ -46,6 +46,20 @@ class EnrollStudentRosterView(generics.CreateAPIView):
     serializer_class = EnrollStudentRosterSerializer
     permission_classes = [IsAdmin]
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        roster = serializer.save()
+        return Response(
+            {
+                "username": serializer._generated_username,
+                "phone_number": roster.phone_number,
+                "full_name": roster.full_name,
+                "message": "Student account created.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
 
 class StudentRosterListView(generics.ListAPIView):
     queryset = StudentRoster.objects.all().order_by("roll_no")
@@ -102,6 +116,8 @@ class RejectStudentView(APIView):
         if roster_entry:
             roster_entry.delete()
         return Response({"username": username, "message": "Signup rejected and removed."})
+
+
 from .serializers import TeacherListSerializer
 
 
@@ -109,6 +125,7 @@ class TeacherListView(generics.ListAPIView):
     queryset = User.objects.filter(role=User.Role.TEACHER).order_by("username")
     serializer_class = TeacherListSerializer
     permission_classes = [IsAdmin]
+
 
 from .models import TeacherProfile
 from .serializers import TeacherProfileSerializer
@@ -169,3 +186,50 @@ class StudentRosterManageDetailView(generics.RetrieveUpdateDestroyAPIView):
             )
         entry.delete()
         return Response(status=204)
+
+class ResetTeacherPasswordView(APIView):
+    permission_classes = [IsAdmin]
+
+    def post(self, request, pk):
+        import secrets
+        from .models import TeacherProfile
+
+        profile = get_object_or_404(TeacherProfile, pk=pk)
+        user = profile.user
+        temp_password = secrets.token_urlsafe(6)
+        user.set_password(temp_password)
+        user.must_change_password = True
+        user.save(update_fields=["password", "must_change_password"])
+        return Response(
+            {
+                "username": user.username,
+                "temporary_password": temp_password,
+                "message": "Password reset. Share the new credentials securely; "
+                           "the teacher must change the password on first login.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ResetTeacherPasswordView(APIView):
+    permission_classes = [IsAdmin]
+
+    def post(self, request, pk):
+        import secrets
+        from .models import TeacherProfile
+
+        profile = get_object_or_404(TeacherProfile, pk=pk)
+        user = profile.user
+        temp_password = secrets.token_urlsafe(6)
+        user.set_password(temp_password)
+        user.must_change_password = True
+        user.save(update_fields=["password", "must_change_password"])
+        return Response(
+            {
+                "username": user.username,
+                "temporary_password": temp_password,
+                "message": "Password reset. Share the new credentials securely; "
+                           "the teacher must change the password on first login.",
+            },
+            status=status.HTTP_200_OK,
+        )
