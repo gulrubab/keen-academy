@@ -47,12 +47,14 @@ INSTALLED_APPS = [
     'accounts',
     'academics',
     'attendance',
+    "expenses",
     'fees',
     'inquiries',
     'homework',
     'timetable',
     'exams',
     'notifications',
+    "profiles",
 ]
 
 MIDDLEWARE = [

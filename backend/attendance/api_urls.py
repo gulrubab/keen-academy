@@ -5,8 +5,10 @@ from .attendance_api import (
     AttendanceSearchView,
     AttendanceSheetView,
     AttendanceTodayView,
-    StudentAttendanceView,
     AttendanceTrendView,
+    StudentAttendanceView,
+    TeacherAttendanceHistoryView,
+    TeacherAttendanceSheetView,
 )
 
 urlpatterns = [
@@ -16,4 +18,6 @@ urlpatterns = [
     path("student/<int:user_id>/", StudentAttendanceView.as_view(), name="attendance-student"),
     path("summary/", AttendanceTodayView.as_view(), name="attendance-today"),
     path("trend/", AttendanceTrendView.as_view(), name="attendance-trend"),
+    path("teachers/sheet/", TeacherAttendanceSheetView.as_view(), name="attendance-teacher-sheet"),
+    path("teachers/history/", TeacherAttendanceHistoryView.as_view(), name="attendance-teacher-history"),
 ]

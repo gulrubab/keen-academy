@@ -145,6 +145,9 @@ export const api = {
     request(`/api/exams/marks/${id}/`, { method: "PATCH", body: payload }),
 
   listFees: () => request("/api/fees/payments/"),
+  listFeeStudents: () => request("/api/fees/payments/students/"),
+  createFee: (payload) => request("/api/fees/payments/", { method: "POST", body: payload }),
+  deleteFee: (id) => request(`/api/fees/payments/${id}/`, { method: "DELETE" }),
   updateFee: (id, payload) =>
     request(`/api/fees/payments/${id}/`, { method: "PATCH", body: payload }),
   generateChallans: (payload) =>
@@ -203,6 +206,13 @@ export const api = {
     request(`/api/timetable/slots/${id}/`, { method: "PATCH", body: payload }),
   deleteTimetableSlot: (id) => request(`/api/timetable/slots/${id}/`, { method: "DELETE" }),
   dashboardSummary: () => request("/api/dashboard/summary/"),
+  getMyProfile: () => request("/api/profiles/me/"),
+  updateMyProfile: (body) => request("/api/profiles/me/", { method: "PATCH", body }),
+  changeMyPassword: (body) => request("/api/profiles/password/", { method: "POST", body }),
+  listAnnouncements: () => request("/api/notifications/announcements/"),
+  createAnnouncement: (body) => request("/api/notifications/announcements/", { method: "POST", body }),
+  deleteAnnouncement: (id) => request(`/api/notifications/announcements/${id}/`, { method: "DELETE" }),
+  dailyFeed: (days = 1) => request(`/api/notifications/daily/?days=${days}`),
 
   attendanceClasses: () => request("/api/attendance/classes/"),
   attendanceSheet: (classId, day) =>
@@ -221,6 +231,16 @@ export const api = {
   attendanceToday: () => request("/api/attendance/summary/"),
 
   attendanceTrend: (days) => request(`/api/attendance/trend/?days=${days}`),
+
+  teacherAttendanceSheet: (day) => request(`/api/attendance/teachers/sheet/?date=${day}`),
+  saveTeacherAttendance: (payload) =>
+    request("/api/attendance/teachers/sheet/", { method: "POST", body: payload }),
+  teacherAttendanceHistory: (params) =>
+    request("/api/attendance/teachers/history/?" + new URLSearchParams(params).toString()),
+  listExpenses: () => request("/api/expenses/"),
+  createExpense: (body) => request("/api/expenses/", { method: "POST", body }),
+  updateExpense: (id, body) => request(`/api/expenses/${id}/`, { method: "PATCH", body }),
+  deleteExpense: (id) => request(`/api/expenses/${id}/`, { method: "DELETE" }),
 };
 
 

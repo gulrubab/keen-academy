@@ -3,6 +3,8 @@ import { api } from "../lib/api";
 import { AppShell, Button, Notice } from "../components/ui";
 import TeacherExtras from "../components/TeacherExtras";
 import NewTeacherExtras from "../components/NewTeacherExtras";
+import TeacherAttendanceModal from "../components/TeacherAttendanceModal";
+
 
 // Fields shown with a red * in the form. Add a key here to make another field required.
 const REQUIRED = ["first_name"];
@@ -165,6 +167,7 @@ export default function AddTeacher() {
   const [resetResult, setResetResult] = useState(null);
   const [resettingPw, setResettingPw] = useState(false);
   const [profiles, setProfiles] = useState([]);
+  const [showAttendance, setShowAttendance] = useState(false);
 
   const loadProfiles = useCallback(async () => {
     try {
@@ -436,15 +439,25 @@ export default function AddTeacher() {
       subtitle={
         count + " teacher" + (count === 1 ? "" : "s") + " registered"
       }
-      action={
-        <button
-          type="button"
-          onClick={openAdd}
-          className="rounded-xl bg-keen-cyan px-5 py-3 text-sm font-bold text-keen-darkest shadow-sm shadow-keen-cyan/25 hover:bg-keen-cyanDark"
-        >
-          + Add New Teacher
-        </button>
+            action={
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setShowAttendance(true)}
+            className="rounded-xl border border-keen-border bg-white px-5 py-3 text-sm font-bold text-keen-charcoal shadow-sm hover:bg-slate-50"
+          >
+            Teacher Attendance
+          </button>
+          <button
+            type="button"
+            onClick={openAdd}
+            className="rounded-xl bg-keen-cyan px-5 py-3 text-sm font-bold text-keen-darkest shadow-sm shadow-keen-cyan/25 hover:bg-keen-cyanDark"
+          >
+            + Add New Teacher
+          </button>
+        </div>
       }
+      
     >
       <div className="space-y-3">
         <Notice>{pageError}</Notice>
@@ -928,8 +941,15 @@ export default function AddTeacher() {
             </div>
           </div>
         </div>
+        
+      )}
+
+
+      {showAttendance && (
+        <TeacherAttendanceModal onClose={() => setShowAttendance(false)} />
       )}
     </AppShell>
+    
   );
 }
 

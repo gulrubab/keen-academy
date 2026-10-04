@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from django.db import transaction
 from django.db.models import Q
@@ -8,11 +8,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from academics.models import SchoolClass, Subject
-from accounts.models import StudentProfile
+from accounts.models import StudentProfile, TeacherProfile
 
-from .models import AttendanceEntry
+from .models import AttendanceEntry, TeacherAttendance
 
 STATUSES = [c[0] for c in AttendanceEntry.Status.choices]
+TEACHER_STATUSES = [c[0] for c in TeacherAttendance.Status.choices]
 
 
 def _name(user):
@@ -286,8 +287,6 @@ class AttendanceTodayView(APIView):
         s = _summary(AttendanceEntry.objects.filter(date=today).values_list("status", flat=True))
         return Response({"date": today.isoformat(), **s})
 
-from datetime import timedelta as _timedelta
-
 
 class AttendanceTrendView(APIView):
     """Daily attendance totals for the last N days, for the dashboard chart."""
@@ -301,12 +300,151 @@ class AttendanceTrendView(APIView):
         days = int(raw) if str(raw).isdigit() else 7
         days = max(2, min(days, 31))
         today = date.today()
-        start = today - _timedelta(days=days - 1)
+        start = today - timedelta(days=days - 1)
         by_day = {}
         for d, st in AttendanceEntry.objects.filter(date__gte=start, date__lte=today).values_list("date", "status"):
             by_day.setdefault(d, []).append(st)
         out = []
         for i in range(days):
-            d = start + _timedelta(days=i)
+            d = start + timedelta(days=i)
             out.append({"date": d.isoformat(), "weekday": d.strftime("%a"), **_summary(by_day.get(d, []))})
         return Response({"today": today.isoformat(), "days": out})
+
+
+# ---------------------------------------------------------------------------
+# Teacher attendance (marked by the admin)
+# ---------------------------------------------------------------------------
+
+
+def _teacher_name(t):
+    user = getattr(t, "user", None)
+    full = (user.get_full_name() or user.username) if user else ""
+    if not full:
+        full = " ".join(
+            x for x in [getattr(t, "first_name", ""), getattr(t, "last_name", "")] if x
+        ).strip()
+    return full or str(t)
+
+
+class TeacherAttendanceSheetView(APIView):
+    """Admin marks every teacher for one day. GET loads the sheet, POST saves it."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _denied(self, request):
+        return request.user.role in ("student", "teacher")
+
+    def get(self, request):
+        if self._denied(request):
+            return _deny("Only admins can mark teacher attendance.")
+        ok, day = _read_day(request.query_params.get("date"))
+        if not ok:
+            return _deny("Use a date like 2026-09-21.", 400)
+        day = day or timezone.localdate()
+
+        saved = {e.teacher_id: e for e in TeacherAttendance.objects.filter(date=day)}
+        rows = []
+        for t in TeacherProfile.objects.order_by("id"):
+            e = saved.get(t.id)
+            rows.append(
+                {
+                    "teacher": t.id,
+                    "name": _teacher_name(t),
+                    "status": e.status if e else "",
+                    "note": e.note if e else "",
+                }
+            )
+        return Response(
+            {
+                "date": day.isoformat(),
+                "rows": rows,
+                "summary": _summary([r["status"] for r in rows if r["status"]]),
+            }
+        )
+
+    def post(self, request):
+        if self._denied(request):
+            return _deny("Only admins can mark teacher attendance.")
+        ok, day = _read_day(request.data.get("date"))
+        if not ok or not day:
+            return _deny("A valid date is required.", 400)
+
+        valid_ids = set(TeacherProfile.objects.values_list("id", flat=True))
+        saved = 0
+        with transaction.atomic():
+            for item in request.data.get("entries") or []:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    tid = int(item.get("teacher"))
+                except (TypeError, ValueError):
+                    continue
+                status = item.get("status")
+                if tid not in valid_ids or status not in TEACHER_STATUSES:
+                    continue
+                TeacherAttendance.objects.update_or_create(
+                    teacher_id=tid,
+                    date=day,
+                    defaults={
+                        "status": status,
+                        "note": str(item.get("note") or "")[:200],
+                        "marked_by": request.user,
+                        "marked_at": timezone.now(),
+                    },
+                )
+                saved += 1
+        return Response({"saved": saved, "date": day.isoformat()})
+
+
+class TeacherAttendanceHistoryView(APIView):
+    """Past teacher attendance. ?teacher=<id> gives one teacher's days; without it, a summary per teacher."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role in ("student", "teacher"):
+            return _deny("Only admins can view teacher attendance.")
+        ok_from, start = _read_day(request.query_params.get("from"))
+        ok_to, end = _read_day(request.query_params.get("to"))
+        if not (ok_from and ok_to):
+            return _deny("Use dates like 2026-09-21.", 400)
+
+        qs = TeacherAttendance.objects.select_related("marked_by")
+        if start:
+            qs = qs.filter(date__gte=start)
+        if end:
+            qs = qs.filter(date__lte=end)
+
+        raw = request.query_params.get("teacher")
+        if raw:
+            if not str(raw).isdigit():
+                return _deny("Pick a teacher.", 400)
+            teacher = TeacherProfile.objects.filter(pk=int(raw)).first()
+            if not teacher:
+                return _deny("Teacher not found.", 404)
+            records = [
+                {
+                    "date": e.date.isoformat(),
+                    "weekday": e.date.strftime("%A"),
+                    "status": e.status,
+                    "note": e.note,
+                    "marked_by": _name(e.marked_by),
+                }
+                for e in qs.filter(teacher=teacher).order_by("-date")
+            ]
+            return Response(
+                {
+                    "teacher": {"id": teacher.id, "name": _teacher_name(teacher)},
+                    "records": records,
+                    "summary": _summary([r["status"] for r in records]),
+                }
+            )
+
+        by_teacher = {}
+        for tid, st in qs.values_list("teacher_id", "status"):
+            by_teacher.setdefault(tid, []).append(st)
+        rows = [
+            {"teacher": t.id, "name": _teacher_name(t), **_summary(by_teacher.get(t.id, []))}
+            for t in TeacherProfile.objects.order_by("id")
+        ]
+        return Response({"teachers": rows})

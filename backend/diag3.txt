@@ -1,0 +1,71 @@
+﻿--- full StudentRoster model ---
+class StudentRoster(models.Model):
+    class Source(models.TextChoices):
+        ADMIN = "admin", "Enrolled by admin (pre-verified)"
+        SELF = "self", "Submitted by student at signup (needs admin approval)"
+
+    roll_no = models.CharField(max_length=30, unique=True)
+    full_name = models.CharField(max_length=150)
+    class_name = models.CharField(max_length=50)
+    section = models.CharField(max_length=10, blank=True)
+    school_class = models.ForeignKey(
+        "academics.SchoolClass", on_delete=models.SET_NULL, null=True, blank=True, related_name="student_rosters"
+    )
+    date_of_birth = models.DateField(null=True, blank=True)
+    cnic_or_bform = models.CharField(max_length=30, blank=True)
+    phone_number = models.CharField(max_length=20, blank=True)
+    activation_code = models.CharField(max_length=10, blank=True)
+    source = models.CharField(max_length=10, choices=Source.choices, default=Source.ADMIN)
+    is_claimed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.roll_no} - {self.full_name}"
+
+
+
+
+class StudentProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="student_profile")
+    roster_entry = models.OneToOneField(StudentRoster, on_delete=models.PROTECT, related_name="student_account")
+
+    def __str__(self):
+        return f"{self.user.username} - Roll No {self.roster_entry.roll_no}"
+
+
+class TeacherProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="teacher_profile")
+    subject_specialization = models.CharField(max_length=100, blank=True)
+    cnic = models.CharField(max_length=20, blank=True)
+    address = models.CharField(max_length=255, blank=True)
+    joining_date = models.DateField(null=True, blank=True)
+--- notifications views.py ---
+from django.shortcuts import render
+
+# Create your views here.
+--- notifications admin.py ---
+from django.contrib import admin
+
+# Register your models here.
+--- does notifications have serializers.py or urls.py? ---
+False
+False
+--- main urls.py full content ---
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('api/auth/', include('accounts.urls')),
+    path('api/academics/', include('academics.urls')),
+    path('api/exams/', include('exams.urls')),
+    path('api/fees/', include('fees.urls')),
+    path('api/inquiries/', include('inquiries.urls')),
+    path('api/timetable/', include('timetable.urls')),
+]
+
+from accounts.dashboard_views import DashboardSummaryView
+urlpatterns += [path("api/dashboard/summary/", DashboardSummaryView.as_view()),
+    path('api/attendance/', include('attendance.api_urls')),
+    path('api/expenses/', include('expenses.urls')),
+]

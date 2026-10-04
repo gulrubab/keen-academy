@@ -215,6 +215,7 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
     phone_number = serializers.CharField(source="user.phone_number", required=False, allow_blank=True)
     is_active = serializers.BooleanField(source="user.is_active", required=False)
     assigned_lectures = serializers.SerializerMethodField()
+    date_joined = serializers.DateTimeField(source="user.date_joined", read_only=True)
 
     def get_assigned_lectures(self, obj):
         from academics.models import Subject
@@ -235,7 +236,7 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
         fields = [
             "id", "username", "first_name", "last_name", "email", "phone_number",
             "subject_specialization", "cnic", "address", "joining_date", "salary",
-            "shift_start", "shift_end", "is_active", "assigned_lectures",
+            "shift_start", "shift_end", "is_active", "assigned_lectures", "date_joined",
         ]
 
     def update(self, instance, validated_data):

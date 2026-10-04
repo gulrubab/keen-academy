@@ -10,10 +10,15 @@ class SchoolClassSerializer(serializers.ModelSerializer):
 
 class SubjectSerializer(serializers.ModelSerializer):
     teacher_name = serializers.CharField(source="teacher.username", read_only=True)
+    school_class_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Subject
-        fields = ["id", "name", "code", "school_class", "teacher", "teacher_name"]
+        fields = ["id", "name", "code", "school_class", "school_class_name", "teacher", "teacher_name"]
+
+    def get_school_class_name(self, obj):
+        c = obj.school_class
+        return f"{c.name} {c.section}".strip() if c else None
 
 from accounts.models import StudentProfile
 

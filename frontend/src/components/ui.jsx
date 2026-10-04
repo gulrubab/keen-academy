@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { api } from "../lib/api";
 
 export function Logo({ size = 44, className = "" }) {
   return (
@@ -64,9 +65,21 @@ const NAV = [
     icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
   },
   {
+    to: "/expenses",
+    label: "Expenses",
+    roles: ["hod", "admin", "staff"],
+    icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
+  {
+    to: "/daily",
+    label: "Daily Queries",
+    roles: ["hod", "admin", "staff"],
+    icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9",
+  },
+  {
     to: "/attendance",
     label: "Attendance",
-    roles: ["hod", "admin", "staff", "teacher", "student"],
+    roles: ["hod", "admin", "staff", "student"],
     icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
   },
   {
@@ -74,6 +87,12 @@ const NAV = [
     label: "Timetables",
     roles: ["hod", "admin", "staff", "teacher", "student"],
     icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+  },
+  {
+    to: "/settings",
+    label: "Settings",
+    roles: ["teacher"],
+    icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z",
   },
 ];
 
@@ -125,11 +144,172 @@ export function Button({
   );
 }
 
+const BELL_ICON =
+  "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9";
+
+function timeAgo(iso) {
+  if (!iso) return "";
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return mins + " min ago";
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + " hr ago";
+  const days = Math.floor(hrs / 24);
+  return days === 1 ? "Yesterday" : days + " days ago";
+}
+
+export function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [showAll, setShowAll] = useState(false);
+  const boxRef = useRef(null);
+
+  const load = async () => {
+    if (typeof api.listAnnouncements !== "function") return;
+    try {
+      const data = await api.listAnnouncements();
+      setItems(Array.isArray(data) ? data : data?.results ?? []);
+    } catch {
+      /* keep the bell quiet if the request fails */
+    }
+  };
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const unread = items.filter((n) => !n.is_read).length;
+  const shown = showAll ? items : items.slice(0, 5);
+
+  const markOne = async (n) => {
+    if (n.is_read) return;
+    setItems((list) => list.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)));
+    try {
+      if (typeof api.markAnnouncementRead === "function") await api.markAnnouncementRead(n.id);
+    } catch {
+      load();
+    }
+  };
+
+  const markAll = async () => {
+    setItems((list) => list.map((x) => ({ ...x, is_read: true })));
+    try {
+      if (typeof api.markAllAnnouncementsRead === "function") await api.markAllAnnouncementsRead();
+    } catch {
+      load();
+    }
+  };
+
+  return (
+    <div ref={boxRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Notifications"
+        aria-expanded={open}
+        className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-keen-border bg-white text-keen-charcoal shadow-sm transition hover:bg-slate-50"
+      >
+        <Icon d={BELL_ICON} className="h-5 w-5" />
+        {unread > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold text-white">
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-14 z-50 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-keen-border bg-white shadow-2xl">
+          <div className="flex items-center justify-between border-b border-keen-border bg-slate-50/60 px-4 py-3">
+            <div>
+              <p className="text-sm font-extrabold text-keen-charcoal">Announcements</p>
+              <p className="text-[11px] text-keen-muted">
+                {unread ? unread + " unread" : "You're all caught up"}
+              </p>
+            </div>
+            {unread > 0 && (
+              <button
+                type="button"
+                onClick={markAll}
+                className="text-xs font-bold text-[#0AA9D4] hover:underline"
+              >
+                Mark all as read
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-96 overflow-y-auto">
+            {shown.length === 0 ? (
+              <p className="p-8 text-center text-xs font-medium text-keen-muted">
+                No announcements yet.
+              </p>
+            ) : (
+              shown.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => markOne(n)}
+                  className={
+                    "flex w-full gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-keen-cyanSoft/40 " +
+                    (n.is_read ? "" : "bg-keen-cyanSoft/30")
+                  }
+                >
+                  <span
+                    className={
+                      "mt-1.5 h-2 w-2 shrink-0 rounded-full " +
+                      (n.is_read ? "bg-transparent" : "bg-[#0AA9D4]")
+                    }
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-keen-charcoal">
+                      {n.title}
+                    </span>
+                    {(n.body || n.message) && (
+                      <span className="mt-0.5 line-clamp-2 block text-xs text-keen-muted">
+                        {n.body || n.message}
+                      </span>
+                    )}
+                    <span className="mt-1 block text-[11px] text-keen-muted">
+                      {n.sender_name ? n.sender_name + " · " : ""}
+                      {timeAgo(n.created_at)}
+                    </span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+
+          {items.length > 5 && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className="w-full border-t border-keen-border px-4 py-3 text-center text-xs font-bold text-[#0AA9D4] hover:bg-slate-50"
+            >
+              {showAll ? "Show fewer" : "View all announcements"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppShell({ badge, title, subtitle, action, children }) {
   const { session, logout, role } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const initials = (session?.username || "?").slice(0, 2).toUpperCase();
+  const showBell = role === "teacher" || role === "student";
   const items = NAV.filter(
     (item) => !item.roles || item.roles.includes(role)
   );
@@ -356,9 +536,21 @@ export function AppShell({ badge, title, subtitle, action, children }) {
           <span className="ml-3 text-sm font-extrabold text-keen-charcoal">
             Keen Academy
           </span>
+
+          {showBell && (
+            <div className="ml-auto">
+              <NotificationBell />
+            </div>
+          )}
         </div>
 
         <main className="mx-auto w-full max-w-7xl space-y-5 p-4 sm:p-5 md:space-y-6 md:p-6 lg:p-8">
+          {showBell && (
+            <div className="hidden justify-end lg:flex">
+              <NotificationBell />
+            </div>
+          )}
+
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0">
               {badge ? (
@@ -676,6 +868,3 @@ export function DeleteButton({
     </button>
   );
 }
-
-
-

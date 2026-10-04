@@ -194,14 +194,17 @@ export default function AdminDashboard() {
     setLoading(true);
     setError("");
     try {
-      const [summary, pending, roster] = await Promise.all([
+      const [summary, pending, roster, inquiriesRaw] = await Promise.all([
         api.dashboardSummary(),
         api.pendingStudents(),
         api.listStudentRoster(),
+        api.listInquiries(),
       ]);
       const asList = (x) => (Array.isArray(x) ? x : x?.results ?? []);
       summary.counts.students = asList(roster).length;
       summary.counts.pending_signups = asList(pending).length;
+      const todayStr = new Date().toISOString().slice(0, 10);
+      summary.todayInquiries = asList(inquiriesRaw).filter((i) => (i.created_at || "").slice(0, 10) === todayStr);
       setData(summary);
     } catch (e) {
       setError(e.message || "Could not load the dashboard.");
@@ -223,7 +226,7 @@ export default function AdminDashboard() {
     );
   if (!data) return <AppShell title="Admin dashboard"><p className="text-slate-500">Loading dashboard...</p></AppShell>;
 
-  const { counts, enrollment, attendance, fees, homework_pending, teachers } = data;
+  const { counts, enrollment, attendance, fees, homework_pending, teachers, todayInquiries = [] } = data;
   const tasks = data.tasks || { pending: 0, done: 0 };
   const growth =
     enrollment.length > 1 && enrollment[0].count > 0
@@ -280,6 +283,29 @@ export default function AdminDashboard() {
 
         <Card title="Tasks" to="/teacher/tasks">
           <Donut pending={tasks.pending} done={tasks.done} />
+        </Card>
+
+        <Card
+          title="Today's Inquiries" to="/inquiries"
+          right={<Pill tone={todayInquiries.length > 0 ? "cyan" : "slate"}>{todayInquiries.length} today</Pill>}
+        >
+          {todayInquiries.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-400">No inquiries today.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 text-sm">
+              {todayInquiries.slice(0, 5).map((i) => (
+                <li key={i.id} className="flex items-center justify-between py-2">
+                  <div>
+                    <div className="font-semibold text-slate-700">{i.student_name}</div>
+                    <div className="text-xs text-slate-400">{i.intended_class}</div>
+                  </div>
+                  <Pill tone={i.status === "enrolled" ? "green" : i.status === "dropped" ? "red" : "cyan"}>
+                    {i.status.replace("_", " ")}
+                  </Pill>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
 

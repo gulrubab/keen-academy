@@ -55,3 +55,34 @@ class AttendanceEntry(models.Model):
 
     def __str__(self):
         return f"{self.student} {self.date} {self.status}"
+
+
+
+
+class TeacherAttendance(models.Model):
+    """One teacher's attendance for one day, marked by the admin."""
+
+    class Status(models.TextChoices):
+        PRESENT = "present", "Present"
+        ABSENT = "absent", "Absent"
+        LATE = "late", "Late"
+        LEAVE = "leave", "Leave"
+
+    teacher = models.ForeignKey(
+        "accounts.TeacherProfile", on_delete=models.CASCADE, related_name="attendance_entries"
+    )
+    date = models.DateField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PRESENT)
+    note = models.CharField(max_length=200, blank=True)
+    marked_at = models.DateTimeField(default=_tz.now)
+    marked_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="teacher_attendance_marked",
+    )
+
+    class Meta:
+        ordering = ["-date", "id"]
+        unique_together = ("teacher", "date")
+
+    def __str__(self):
+        return f"{self.teacher} {self.date} {self.status}"

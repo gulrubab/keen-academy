@@ -78,7 +78,10 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
         return [IsAdmin()]
 
     def get_queryset(self):
-        qs = FeePayment.objects.select_related("student").order_by("-due_date", "student__username")
+    
+        qs = FeePayment.objects.select_related(
+            "student__student_profile__roster_entry__school_class"
+        ).order_by("-due_date", "student__username")
         user = self.request.user
         if user.role == "student":
             return qs.filter(student=user)

@@ -26,6 +26,15 @@ const daysAgo = (n) => {
 const monthStart = () => todayStr().slice(0, 8) + "01";
 const fmtDate = (iso) =>
   iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "";
+const fmtLong = (iso) =>
+  iso
+    ? new Date(iso + "T00:00:00").toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
 const fmtShort = (iso) =>
   iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
 const fmtClock = (iso) =>
@@ -62,6 +71,8 @@ export default function Attendance() {
           ? "Your attendance record."
           : tab === "class"
           ? "Mark attendance for a class and print the sheet."
+          : tab === "date"
+          ? "See saved attendance for any past date."
           : "Look up any student's attendance history."
       }
     >
@@ -75,11 +86,14 @@ export default function Attendance() {
               <button type="button" role="tab" className="at-tab" aria-selected={tab === "class"} onClick={() => setTab("class")}>
                 By class
               </button>
+              <button type="button" role="tab" className="at-tab" aria-selected={tab === "date"} onClick={() => setTab("date")}>
+                By date
+              </button>
               <button type="button" role="tab" className="at-tab" aria-selected={tab === "search"} onClick={() => setTab("search")}>
                 Search student
               </button>
             </div>
-            {tab === "class" ? <ClassSheet /> : <SearchStudent />}
+            {tab === "class" ? <ClassSheet /> : tab === "date" ? <ByDate /> : <SearchStudent />}
           </>
         )}
       </div>
@@ -417,12 +431,160 @@ function ClassSheet() {
   );
 }
 
+// Read-only view: pick a past date and see every class's saved attendance for that day.
+function ByDate() {
+  const [day, setDay] = useState(todayStr());
+  const [sheets, setSheets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const classes = asList(await api.attendanceClasses());
+        const all = await Promise.all(classes.map((c) => api.attendanceSheet(c.id, day)));
+        if (alive) setSheets(all);
+      } catch (e) {
+        if (alive) setError(e.message);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [day]);
+
+  const visible = useMemo(
+    () => sheets.filter((s) => !classFilter || String(s.school_class) === classFilter),
+    [sheets, classFilter]
+  );
+
+  const totals = useMemo(() => {
+    const c = { present: 0, absent: 0, late: 0, leave: 0, none: 0 };
+    for (const sh of visible)
+      for (const s of sh.students) {
+        if (s.status) c[s.status] += 1;
+        else c.none += 1;
+      }
+    return c;
+  }, [visible]);
+
+  return (
+    <div>
+      <div className="at-controls">
+        <label>
+          Date
+          <input
+            type="date"
+            value={day}
+            max={todayStr()}
+            onChange={(e) => e.target.value && setDay(e.target.value)}
+          />
+        </label>
+        <label>
+          Class
+          <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+            <option value="">All classes</option>
+            {sheets.map((s) => (
+              <option key={s.school_class} value={s.school_class}>
+                {s.class_label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Status
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">All</option>
+            <option value="present">Present</option>
+            <option value="absent">Absent</option>
+            <option value="late">Late</option>
+            <option value="leave">Leave</option>
+            <option value="none">Not marked</option>
+          </select>
+        </label>
+      </div>
+
+      {error && (
+        <div className="at-msg at-err" role="alert">
+          {error}
+        </div>
+      )}
+      {loading && <p className="at-muted">Loading attendance...</p>}
+
+      {!loading && !error && (
+        <>
+          <p className="at-dateline">{fmtLong(day)}</p>
+          <div className="at-chips">
+            <span className="at-chip at-st-present">Present {totals.present}</span>
+            <span className="at-chip at-st-absent">Absent {totals.absent}</span>
+            <span className="at-chip at-st-late">Late {totals.late}</span>
+            <span className="at-chip at-st-leave">Leave {totals.leave}</span>
+            <span className="at-chip at-st-none">Not marked {totals.none}</span>
+          </div>
+
+          {visible.length === 0 && <p className="at-muted">No classes found.</p>}
+
+          {visible.map((sh) => {
+            const rows = sh.students.filter((s) =>
+              !statusFilter ? true : statusFilter === "none" ? !s.status : s.status === statusFilter
+            );
+            if (statusFilter && rows.length === 0) return null;
+            return (
+              <div key={sh.school_class} className="at-block">
+                <h3 className="at-block-title">{sh.class_label}</h3>
+                {sh.students.length === 0 ? (
+                  <p className="at-muted">No registered students in this class.</p>
+                ) : (
+                  <div className="at-wrap">
+                    <table className="at-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Roll no.</th>
+                          <th>Student</th>
+                          <th>Status</th>
+                          <th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((s, i) => (
+                          <tr key={s.student}>
+                            <td>{i + 1}</td>
+                            <td>{s.roll_no}</td>
+                            <td className="at-name">{titleCase(s.name)}</td>
+                            <td>
+                              <StatusPill status={s.status} />
+                            </td>
+                            <td>{s.note || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
+
 function SearchStudent() {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState("");
+  const [version, setVersion] = useState(0);
   const reqRef = useRef(0);
 
   useEffect(() => {
@@ -493,7 +655,179 @@ function SearchStudent() {
         </ul>
       )}
 
-      {selected && <StudentHistory key={selected.id} userId={selected.id} />}
+      {selected && (
+        <>
+          <MarkStudent key={"mark-" + selected.id} student={selected} onSaved={() => setVersion((v) => v + 1)} />
+          <StudentHistory key={selected.id + "-" + version} userId={selected.id} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// Mark (or change) one student's attendance for a chosen date, straight from the search tab.
+function MarkStudent({ student, onSaved }) {
+  const [day, setDay] = useState(todayStr());
+  const [classId, setClassId] = useState(undefined); // undefined = looking up, null = not found
+  const [status, setStatus] = useState(null);
+  const [note, setNote] = useState("");
+  const [saved, setSaved] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  // the search result only carries the class name, so find its id in the class list
+  useEffect(() => {
+    let alive = true;
+    api
+      .attendanceClasses()
+      .then((d) => {
+        if (!alive) return;
+        const match = asList(d).find((c) => c.label === student.class_label);
+        setClassId(match ? match.id : null);
+        if (!match) setLoading(false);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setError(e.message);
+        setClassId(null);
+        setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [student.class_label]);
+
+  // load what is already saved for the chosen day
+  useEffect(() => {
+    if (!classId) return;
+    let alive = true;
+    setLoading(true);
+    setError("");
+    setNotice("");
+    api
+      .attendanceSheet(classId, day)
+      .then((sheet) => {
+        if (!alive) return;
+        const row = sheet.students.find((s) => s.student === student.id);
+        setSaved(row?.status ? { status: row.status, note: row.note || "" } : null);
+        setStatus(row?.status ?? null);
+        setNote(row?.note || "");
+      })
+      .catch((e) => alive && setError(e.message))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [classId, day, student.id]);
+
+  const dirty = status !== (saved?.status ?? null) || note.trim() !== (saved?.note ?? "");
+
+  async function save() {
+    if (!status || !classId) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await api.saveAttendance({
+        school_class: Number(classId),
+        date: day,
+        records: [{ student: student.id, status, note: note.trim() }],
+      });
+      setSaved({ status, note: note.trim() });
+      setNotice("Saved " + labelOf(status) + " for " + titleCase(student.name) + " on " + fmtShort(day) + ".");
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="at-mark">
+      <div className="at-mark-head">
+        <h3>
+          Mark attendance: {titleCase(student.name)}
+          <span className="at-muted">
+            {" "}
+            ({student.roll_no}
+            {student.class_label ? ", " + student.class_label : ""})
+          </span>
+        </h3>
+        {saved && (
+          <span className="at-muted">
+            Already marked <StatusPill status={saved.status} />
+          </span>
+        )}
+      </div>
+
+      {classId === null && (
+        <p className="at-muted">Could not find this student's class here. Use the By class tab to mark attendance.</p>
+      )}
+
+      {classId && (
+        <>
+          <div className="at-controls">
+            <label>
+              Date
+              <input type="date" value={day} max={todayStr()} onChange={(e) => e.target.value && setDay(e.target.value)} />
+            </label>
+            <div className="at-field">
+              <span>Status</span>
+              <div className="at-seg" role="group" aria-label="Status">
+                {STATUSES.map((st) => (
+                  <button
+                    key={st.value}
+                    type="button"
+                    aria-pressed={status === st.value}
+                    className={"s-" + st.value}
+                    onClick={() => {
+                      setNotice("");
+                      setStatus(st.value);
+                    }}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="at-mark-note">
+              Note
+              <input
+                value={note}
+                maxLength={200}
+                placeholder="Optional"
+                onChange={(e) => {
+                  setNotice("");
+                  setNote(e.target.value);
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              className="at-btn at-btn-primary"
+              onClick={save}
+              disabled={saving || loading || !status || !dirty}
+            >
+              {saving ? "Saving..." : "Save attendance"}
+            </button>
+          </div>
+          {loading && <p className="at-muted">Loading...</p>}
+        </>
+      )}
+
+      {error && (
+        <div className="at-msg at-err" role="alert" style={{ marginTop: 12, marginBottom: 0 }}>
+          {error}
+        </div>
+      )}
+      {notice && (
+        <div className="at-msg at-ok" role="status" style={{ marginTop: 12, marginBottom: 0 }}>
+          {notice}
+        </div>
+      )}
     </div>
   );
 }
@@ -683,6 +1017,8 @@ const css = `
 .at-st-late { background: #fff4d6; color: #7a5a00; }
 .at-st-leave { background: #e8f0fc; color: #1d4ed8; }
 .at-st-none { background: #eef0f3; color: #5d6b7a; }
+.at-block { margin-bottom: 22px; }
+.at-block-title { margin: 0 0 8px; font-size: 1.05rem; }
 .at-wrap { overflow-x: auto; border: 1px solid var(--at-line); border-radius: 8px; background: #fff; }
 .at-table { width: 100%; border-collapse: collapse; }
 .at-table th, .at-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--at-line); }
@@ -713,6 +1049,13 @@ const css = `
 .at-bar { height: 6px; background: #e6ecf1; border-radius: 999px; overflow: hidden; }
 .at-bar-fill { height: 100%; background: #1e8e5a; }
 .at-bar-low { background: #dc2626; }
+.at-mark { background: #fff; border: 1px solid var(--at-line); border-radius: 12px; padding: 16px 18px; margin: 4px 0 22px; }
+.at-mark-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.at-mark-head h3 { margin: 0; font-size: 1.05rem; }
+.at-mark .at-controls { margin-bottom: 0; }
+.at-field { display: flex; flex-direction: column; gap: 6px; font-size: .9rem; font-weight: 600; }
+.at-mark-note { flex: 1; min-width: 180px; }
+.at-mark-note input { width: 100%; }
 .at-print { display: none; }
 @media print {
   @page { size: A4; margin: 15mm; }

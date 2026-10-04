@@ -9,6 +9,9 @@ import Timetable from "./pages/Timetable";
 import MyTasks from "./pages/MyTasks";
 import Inquiries from "./pages/Inquiries";
 import FeeManagement from "./pages/FeeManagement";
+import Expenses from "./pages/Expenses";
+import TeacherSettings from "./pages/TeacherSettings";
+import DailyQueries from "./pages/DailyQueries";
 import MyFees from "./pages/MyFees";
 import TranscriptPage from "./pages/TranscriptPage";
 import HodDashboard from "./pages/HodDashboard";
@@ -104,6 +107,30 @@ export default function App() {
             element={
               <Protected allow={["hod", "admin", "staff"]}>
                 <FeeManagement />
+              </Protected>
+            }
+          />
+          <Route
+            path="/expenses"
+            element={
+              <Protected allow={["hod", "admin", "staff"]}>
+                <Expenses />
+              </Protected>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <Protected allow={["teacher"]}>
+                <TeacherSettings />
+              </Protected>
+            }
+          />
+          <Route
+            path="/daily"
+            element={
+              <Protected allow={["hod", "admin", "staff"]}>
+                <DailyQueries />
               </Protected>
             }
           />

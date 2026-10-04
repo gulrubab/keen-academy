@@ -1,0 +1,67 @@
+﻿--- notifications app dir ---
+
+
+    Directory: C:\Users\HP\Desktop\Keen Academy\backend
+
+
+Mode                 LastWriteTime         Length Name                                                 
+----                 -------------         ------ ----                                                 
+d-----        17/09/2026     10:46                notifications                                        
+
+
+--- notifications models.py ---
+from django.db import models
+from accounts.models import User
+
+
+class Announcement(models.Model):
+    title = models.CharField(max_length=150)
+    body = models.TextField()
+    target_role = models.CharField(
+        max_length=10,
+        choices=[("all", "All"), ("teacher", "Teachers"), ("student", "Students")],
+        default="all",
+    )
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="announcements")
+    created_at = models.DateTimeField(auto_now_add=True)
+--- notifications folder contents ---
+
+
+    Directory: C:\Users\HP\Desktop\Keen Academy\backend\notifications
+
+
+Mode                 LastWriteTime         Length Name                                                 
+----                 -------------         ------ ----                                                 
+d-----        17/09/2026     10:46                migrations                                           
+d-----        17/09/2026     10:46                __pycache__                                          
+-a----        17/09/2026     10:39             63 admin.py                                             
+-a----        17/09/2026     10:39            101 apps.py                                              
+-a----        17/09/2026     10:40            511 models.py                                            
+-a----        17/09/2026     10:39             60 tests.py                                             
+-a----        17/09/2026     10:39             63 views.py                                             
+-a----        17/09/2026     10:39              0 __init__.py                                          
+
+
+--- settings.py mentions ---
+
+config\settings.py:56:    'notifications',
+
+
+--- urls.py mentions ---
+--- StudentRoster / TeacherProfile ---
+
+> accounts\models.py:19:class StudentRoster(models.Model):
+  accounts\models.py:20:    class Source(models.TextChoices):
+  accounts\models.py:21:        ADMIN = "admin", "Enrolled by admin (pre-verified)"
+  accounts\models.py:22:        SELF = "self", "Submitted by student at signup (needs admin approval)"
+  accounts\models.py:23:
+  accounts\models.py:24:    roll_no = models.CharField(max_length=30, unique=True)
+> accounts\models.py:53:class TeacherProfile(models.Model):
+  accounts\models.py:54:    user = models.OneToOneField(User, on_delete=models.CASCADE, 
+related_name="teacher_profile")
+  accounts\models.py:55:    subject_specialization = models.CharField(max_length=100, blank=True)
+  accounts\models.py:56:    cnic = models.CharField(max_length=20, blank=True)
+  accounts\models.py:57:    address = models.CharField(max_length=255, blank=True)
+  accounts\models.py:58:    joining_date = models.DateField(null=True, blank=True)
+
+

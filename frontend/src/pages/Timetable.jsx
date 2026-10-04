@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth";
 import { AppShell } from "../components/ui";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const ALL_ID = "__all__";
 const asList = (d) => (Array.isArray(d) ? d : d?.results ?? []);
 const titleCase = (s) => (s || "").toLowerCase().replace(/(^|[\s.'-])([a-z])/g, (m, sep, ch) => sep + ch.toUpperCase());
 const TONES = ["tone-teal", "tone-blue", "tone-violet", "tone-amber", "tone-rose", "tone-green"];
@@ -54,6 +55,139 @@ const fromSlot = (s) => ({
   room: s.room || "",
 });
 
+function periodsOf(list) {
+  const seen = new Map();
+  for (const s of list) {
+    const start = hhmm(s.start_time);
+    const end = hhmm(s.end_time);
+    const key = start + "-" + end;
+    if (!seen.has(key)) seen.set(key, { key, start, end });
+  }
+  return [...seen.values()].sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+}
+
+function slotsAt(list, period, day) {
+  return list.filter(
+    (s) => s.day_of_week === day && hhmm(s.start_time) === period.start && hhmm(s.end_time) === period.end
+  );
+}
+
+function CellActions({ s, busyId, onEdit, onDelete }) {
+  return (
+    <div className="tt-actions tt-noprint">
+      <button type="button" className="tt-icon" title="Edit lecture" aria-label={"Edit " + s.subject_name} disabled={busyId === s.id} onClick={() => onEdit(s)}>
+        <TtIcon d={ICON_EDIT} />
+      </button>
+      <button type="button" className="tt-icon tt-icon-del" title="Delete lecture" aria-label={"Delete " + s.subject_name} disabled={busyId === s.id} onClick={() => onDelete(s)}>
+        <TtIcon d={ICON_TRASH} />
+      </button>
+    </div>
+  );
+}
+
+function TimetableSheet({ title, slots, canEdit, role, busyId, onEdit, onDelete }) {
+  const periods = periodsOf(slots);
+  return (
+    <div className="tt-sheet">
+      <div className="tt-print-head">
+        <h1>KEEN Evening Coaching</h1>
+        <p>Weekly timetable{title ? ": " + title : ""}</p>
+      </div>
+      <div className="tt-wrap">
+        <table className="tt-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              {DAYS.map((d) => (
+                <th key={d} className={d === todayName() ? "tt-today" : ""}>{d}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {periods.map((p) => (
+              <tr key={p.key}>
+                <th scope="row" className="tt-time">
+                  <span className="tt-start">{fmtTime(p.start)}</span>
+                  <span className="tt-end">{fmtTime(p.end)}</span>
+                </th>
+                {DAYS.map((day) => (
+                  <td key={day} className={day === todayName() ? "tt-today-col" : ""}>
+                    {slotsAt(slots, p, day).map((s) => (
+                      <div key={s.id} className={"tt-cell " + toneFor(s.subject_name)}>
+                        <div className="tt-cell-main">
+                          <div className="tt-subject">{s.subject_name}</div>
+                          <div className="tt-teacher">
+                            {role === "teacher" ? s.class_label : s.teacher_name ? titleCase(s.teacher_name) : "No teacher yet"}
+                          </div>
+                          {s.room && <span className="tt-room">Room {s.room}</span>}
+                        </div>
+                        {canEdit && <CellActions s={s} busyId={busyId} onEdit={onEdit} onDelete={onDelete} />}
+                      </div>
+                    ))}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// One master sheet: a row per class, a column per day, lectures listed by time inside each cell.
+function AllClassesSheet({ groups, canEdit, busyId, onEdit, onDelete }) {
+  return (
+    <div className="tt-sheet tt-master">
+      <div className="tt-print-head">
+        <h1>KEEN Evening Coaching</h1>
+        <p>Weekly timetable: All classes</p>
+      </div>
+      <div className="tt-wrap">
+        <table className="tt-table tt-master-table">
+          <thead>
+            <tr>
+              <th>Class</th>
+              {DAYS.map((d) => (
+                <th key={d} className={d === todayName() ? "tt-today" : ""}>{d}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <tr key={g.cls.id}>
+                <th scope="row" className="tt-time tt-classname">{g.cls.label}</th>
+                {DAYS.map((day) => {
+                  const daySlots = g.slots
+                    .filter((s) => s.day_of_week === day)
+                    .sort((a, b) => hhmm(a.start_time).localeCompare(hhmm(b.start_time)));
+                  return (
+                    <td key={day} className={day === todayName() ? "tt-today-col" : ""}>
+                      {daySlots.map((s) => (
+                        <div key={s.id} className={"tt-cell " + toneFor(s.subject_name)}>
+                          <div className="tt-mtime">
+                            {fmtTime(hhmm(s.start_time))} - {fmtTime(hhmm(s.end_time))}
+                          </div>
+                          <div className="tt-subject">{s.subject_name}</div>
+                          <div className="tt-teacher">
+                            {s.teacher_name ? titleCase(s.teacher_name) : "No teacher yet"}
+                            {s.room ? " \u00b7 Room " + s.room : ""}
+                          </div>
+                          {canEdit && <CellActions s={s} busyId={busyId} onEdit={onEdit} onDelete={onDelete} />}
+                        </div>
+                      ))}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function Timetable() {
   const { role } = useAuth();
   const canEdit = role !== "teacher" && role !== "student";
@@ -101,34 +235,37 @@ export default function Timetable() {
     setLoadingSlots(true);
     setError("");
     try {
-      const data = await api.listTimetable(canEdit ? classId : "");
+      let data;
+      if (canEdit && classId === ALL_ID) {
+        const results = await Promise.all(options.classes.map((c) => api.listTimetable(String(c.id))));
+        data = results.flatMap((r) => asList(r));
+      } else {
+        data = await api.listTimetable(canEdit ? classId : "");
+      }
       if (id === reqRef.current) setSlots(asList(data));
     } catch (e) {
       if (id === reqRef.current) setError(messageOf(e));
     } finally {
       if (id === reqRef.current) setLoadingSlots(false);
     }
-  }, [canEdit, classId]);
+  }, [canEdit, classId, options.classes]);
 
   useEffect(() => {
     loadSlots();
   }, [loadSlots]);
 
-  const periods = useMemo(() => {
-    const seen = new Map();
+  const classesWithSlots = useMemo(() => {
+    if (!canEdit || classId !== ALL_ID) return null;
+    const bySlot = new Map();
     for (const s of slots) {
-      const start = hhmm(s.start_time);
-      const end = hhmm(s.end_time);
-      const key = start + "-" + end;
-      if (!seen.has(key)) seen.set(key, { key, start, end });
+      const key = String(s.school_class);
+      if (!bySlot.has(key)) bySlot.set(key, []);
+      bySlot.get(key).push(s);
     }
-    return [...seen.values()].sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
-  }, [slots]);
-
-  const cellSlots = (period, day) =>
-    slots.filter(
-      (s) => s.day_of_week === day && hhmm(s.start_time) === period.start && hhmm(s.end_time) === period.end
-    );
+    return options.classes
+      .map((c) => ({ cls: c, slots: bySlot.get(String(c.id)) || [] }))
+      .filter((g) => g.slots.length > 0);
+  }, [canEdit, classId, slots, options.classes]);
 
   const selectedClass = options.classes.find((c) => String(c.id) === classId);
   const printLabel = canEdit
@@ -148,7 +285,7 @@ export default function Timetable() {
   const setF = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
   function openAdd() {
-    setForm({ ...EMPTY, school_class: classId });
+    setForm({ ...EMPTY, school_class: classId === ALL_ID ? "" : classId });
     setEditing(null);
     setPerror("");
     setModal("add");
@@ -191,8 +328,11 @@ export default function Timetable() {
       else await api.createTimetableSlot(body);
       const verb = modal === "edit" ? "Saved changes to the" : "Added the";
       closeNow();
-      if (String(body.school_class) !== classId) setClassId(String(body.school_class));
-      else await loadSlots();
+      if (classId !== ALL_ID && String(body.school_class) !== classId) {
+        setClassId(String(body.school_class));
+      } else {
+        await loadSlots();
+      }
       setNotice(verb + " lecture on " + body.day_of_week + ".");
     } catch (e) {
       setPerror(messageOf(e));
@@ -235,6 +375,7 @@ export default function Timetable() {
               Class
               <select value={classId} onChange={(e) => setClassId(e.target.value)} disabled={loadingBase}>
                 {options.classes.length === 0 && <option value="">{loadingBase ? "Loading..." : "No classes"}</option>}
+                {options.classes.length > 0 && <option value={ALL_ID}>All classes</option>}
                 {options.classes.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.label}
@@ -270,7 +411,7 @@ export default function Timetable() {
           <p className="tt-muted">No classes exist yet. Add them on the Classes page first.</p>
         )}
         {loadingSlots && <p className="tt-muted">Loading timetable...</p>}
-        {!loadingSlots && slots.length === 0 && (canEdit ? !!classId : true) && !error && (
+        {!loadingSlots && classId !== ALL_ID && slots.length === 0 && (canEdit ? !!classId : true) && !error && (
           <p className="tt-muted">
             {canEdit
               ? "No lectures are scheduled for this class yet. Click Add Lecture to start."
@@ -279,61 +420,30 @@ export default function Timetable() {
               : "No timetable has been published for your class yet."}
           </p>
         )}
+        {!loadingSlots && classId === ALL_ID && classesWithSlots && classesWithSlots.length === 0 && !error && (
+          <p className="tt-muted">No lectures are scheduled for any class yet.</p>
+        )}
 
-        {slots.length > 0 && (
-          <div className="tt-sheet">
-            <div className="tt-print-head">
-              <h1>KEEN Evening Coaching</h1>
-              <p>Weekly timetable{printLabel ? ": " + printLabel : ""}</p>
-            </div>
-            <div className="tt-wrap">
-              <table className="tt-table">
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    {DAYS.map((d) => (
-                      <th key={d} className={d === todayName() ? "tt-today" : ""}>{d}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {periods.map((p) => (
-                    <tr key={p.key}>
-                      <th scope="row" className="tt-time">
-                        <span className="tt-start">{fmtTime(p.start)}</span>
-                        <span className="tt-end">{fmtTime(p.end)}</span>
-                      </th>
-                      {DAYS.map((day) => (
-                        <td key={day} className={day === todayName() ? "tt-today-col" : ""}>
-                          {cellSlots(p, day).map((s) => (
-                            <div key={s.id} className={"tt-cell " + toneFor(s.subject_name)}>
-                              <div className="tt-cell-main">
-                                <div className="tt-subject">{s.subject_name}</div>
-                                <div className="tt-teacher">
-                                  {role === "teacher" ? s.class_label : s.teacher_name ? titleCase(s.teacher_name) : "No teacher yet"}
-                                </div>
-                                {s.room && <span className="tt-room">Room {s.room}</span>}
-                              </div>
-                              {canEdit && (
-                                <div className="tt-actions tt-noprint">
-                                  <button type="button" className="tt-icon" title="Edit lecture" aria-label={"Edit " + s.subject_name} disabled={busyId === s.id} onClick={() => openEdit(s)}>
-                                    <TtIcon d={ICON_EDIT} />
-                                  </button>
-                                  <button type="button" className="tt-icon tt-icon-del" title="Delete lecture" aria-label={"Delete " + s.subject_name} disabled={busyId === s.id} onClick={() => remove(s)}>
-                                    <TtIcon d={ICON_TRASH} />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        {classId === ALL_ID && classesWithSlots && classesWithSlots.length > 0 && (
+          <AllClassesSheet
+            groups={classesWithSlots}
+            canEdit={canEdit}
+            busyId={busyId}
+            onEdit={openEdit}
+            onDelete={remove}
+          />
+        )}
+
+        {classId !== ALL_ID && slots.length > 0 && (
+          <TimetableSheet
+            title={printLabel}
+            slots={slots}
+            canEdit={canEdit}
+            role={role}
+            busyId={busyId}
+            onEdit={openEdit}
+            onDelete={remove}
+          />
         )}
 
         {modal && (
@@ -460,15 +570,7 @@ const css = `
 .tt-table th, .tt-table td { padding: 10px; text-align: left; vertical-align: top; border: 1px solid var(--tt-line); }
 .tt-table thead th { background: #f6f8fa; font-size: .85rem; color: var(--tt-muted); }
 .tt-table .tt-time { width: 110px; background: #f6f8fa; font-size: .85rem; font-weight: 600; white-space: nowrap; }
-.tt-cell { padding: 8px 10px; margin-bottom: 6px; background: #eef4fb; border-left: 3px solid var(--tt-accent); border-radius: 4px; }
 .tt-cell:last-child { margin-bottom: 0; }
-.tt-subject { font-weight: 700; }
-.tt-sub { font-size: .8rem; color: var(--tt-muted); }
-.tt-actions { display: flex; gap: 6px; margin-top: 6px; }
-.tt-edit, .tt-del { padding: 3px 10px; font: inherit; font-size: .75rem; font-weight: 600; color: #fff; border: 0; border-radius: 5px; cursor: pointer; }
-.tt-edit { background: #3b82f6; }
-.tt-del { background: #dc2626; }
-.tt-edit:disabled, .tt-del:disabled { opacity: .6; cursor: not-allowed; }
 .tt-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .5); }
 .tt-modal { display: flex; flex-direction: column; width: 100%; max-width: 640px; max-height: 90vh; background: #fff; border-radius: 16px; box-shadow: 0 20px 50px rgba(0, 0, 0, .3); }
 .tt-modal-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 24px 32px; border-bottom: 1px solid var(--tt-line); }
@@ -506,8 +608,18 @@ const css = `
 .tt-end { display: block; font-size: .8rem; font-weight: 400; color: #5d6b7a; }
 .tt-table thead th.tt-today { color: #1f4e8c; background: #e8f0fc; box-shadow: inset 0 -3px 0 #1f4e8c; }
 .tt-table td.tt-today-col { background: #fafcff; }
-@media print { .tt-table thead th.tt-today { color: #5d6b7a; background: #f6f8fa; box-shadow: none; } .tt-table td.tt-today-col { background: #fff; } .tt-room { background: #fff; border: 1px solid #ccc; } }
+
+/* All classes master sheet */
+.tt-master-table { min-width: 1100px; }
+.tt-master-table .tt-classname { width: 120px; white-space: normal; }
+.tt-master .tt-cell { padding: 6px 8px; margin-bottom: 6px; }
+.tt-mtime { font-size: .72rem; font-weight: 700; color: #1c2530; }
+.tt-master .tt-subject { font-size: .85rem; }
+.tt-master .tt-teacher { font-size: .72rem; }
+.tt-master .tt-actions { top: 4px; right: 4px; }
+
 @media (max-width: 560px) { .tt-modal-body { grid-template-columns: 1fr; } }
+
 @media print {
   @page { size: A4 landscape; margin: 12mm; }
   body * { visibility: hidden; }
@@ -519,6 +631,15 @@ const css = `
   .tt-noprint { display: none !important; }
   .tt-wrap { overflow: visible; border: 0; }
   .tt-table { min-width: 0; font-size: 10pt; }
+  .tt-table thead th.tt-today { color: #5d6b7a; background: #f6f8fa; box-shadow: none; }
+  .tt-table td.tt-today-col { background: #fff; }
   .tt-cell { background: #f3f3f3; border-left-color: #1c2530; }
+  .tt-room { background: #fff; border: 1px solid #ccc; }
+  .tt-master-table { min-width: 0; font-size: 8pt; }
+  .tt-master-table th, .tt-master-table td { padding: 4px 5px; }
+  .tt-master .tt-cell { padding: 3px 5px; margin-bottom: 3px; }
+  .tt-master .tt-subject { font-size: 8pt; }
+  .tt-master .tt-teacher, .tt-mtime { font-size: 7pt; }
+  .tt-master tr { break-inside: avoid; page-break-inside: avoid; }
 }
 `;

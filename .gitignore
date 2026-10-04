@@ -26,3 +26,14 @@ Thumbs.db
 backend/_check.py
 backend/apply_*_patch.py
 frontend/src/pages/*.backup.txt
+
+# local backups and secrets
+*.backup
+*.backup.txt
+*.before-*
+node_modules/
+.venv/
+*.sqlite3
+.env
+
+diag*.txt
